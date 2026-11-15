@@ -1970,7 +1970,7 @@
       const SUPABASE_URL = "https://krmkskargwirsaqskxot.supabase.co";
       const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_g-fdZ8uktWesdPCEWp-0HA_dsmzcw5T";
       const STORAGE_BUCKET = "chat-media";
-      const SYNTHETIC_EMAIL_DOMAIN = "wa-chat.example.com";
+      const SYNTHETIC_EMAIL_DOMAIN = "wachat-app.com";
 
       const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
         auth: {
@@ -2259,7 +2259,6 @@
         const meId = state.currentUserId;
         if (!meId) return;
 
-        // 1. Fetch all profiles
         const { data: profilesData } = await sb.from("profiles").select("*");
         if (profilesData) {
           const nextUsers = {};
@@ -2269,7 +2268,6 @@
           state.users = nextUsers;
         }
 
-        // 2. Fetch my chats
         const { data: chatsData } = await sb
           .from("chats")
           .select("*")
@@ -2283,7 +2281,6 @@
           state.chats = nextChats;
         }
 
-        // 3. Fetch messages in my chats
         const chatIds = Object.keys(state.chats);
         if (chatIds.length > 0) {
           const { data: msgsData } = await sb
@@ -2312,14 +2309,12 @@
 
         realtimeChannel = sb
           .channel("wa_cloud_realtime_v1")
-          // Profiles changes
           .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, (payload) => {
             if (payload.new && payload.new.id) {
               state.users[payload.new.id] = mapProfileFromDB(payload.new);
               renderAll();
             }
           })
-          // Chats changes
           .on("postgres_changes", { event: "*", schema: "public", table: "chats" }, (payload) => {
             if (payload.new && payload.new.id) {
               const mapped = mapChatFromDB(payload.new);
@@ -2333,12 +2328,10 @@
               }
             }
           })
-          // Messages INSERT & UPDATE
           .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, async (payload) => {
             const msg = mapMessageFromDB(payload.new);
             if (!msg) return;
 
-            // Ensure chat is loaded if this is a brand-new chat
             if (!state.chats[msg.chatId]) {
               const { data: chatRow } = await sb.from("chats").select("*").eq("id", msg.chatId).single();
               if (chatRow && (chatRow.participants || []).includes(state.currentUserId)) {
@@ -2377,7 +2370,6 @@
             state.messages[msg.id] = msg;
             renderAll();
           })
-          // Live ephemeral broadcast (typing, recording, viewing chat)
           .on("broadcast", { event: "live_activity" }, ({ payload }) => {
             if (!payload || payload.userId === state.currentUserId) return;
             const chat = state.chats[payload.chatId];
@@ -2753,7 +2745,6 @@
         );
         if (existingLocal) return existingLocal;
 
-        // Check in cloud in case created recently
         const { data: remoteChats } = await sb
           .from("chats")
           .select("*")
@@ -2769,7 +2760,6 @@
           }
         }
 
-        // Create new private chat in Supabase
         const { data: inserted, error } = await sb
           .from("chats")
           .insert({
@@ -3476,7 +3466,6 @@
           }
         }
 
-        // Edit mode
         if (state.editingMsgId && !forwarded && !targetChatId) {
           const msg = state.messages[state.editingMsgId];
           if (msg && msg.senderId === meId && !msg.deletedForEveryone) {
@@ -3888,7 +3877,7 @@
           recordingInterval = setInterval(() => {
             recordingSeconds++;
             const m = String(Math.floor(recordingSeconds / 60)).padStart(2, "0");
-            const s = String(recordingSeconds % 60).padStart(2, "0");
+            const s = String(Math.floor(recordingSeconds % 60)).padStart(2, "0");
             $("recordingTimer").textContent = `${m}:${s}`;
             setTypingState("recording");
           }, 1000);
@@ -4903,7 +4892,6 @@
         try {
           const { data: { session } } = await sb.auth.getSession();
           if (session && session.user) {
-            // Check if profile exists
             const { data: prof } = await sb.from("profiles").select("id").eq("id", session.user.id).maybeSingle();
             if (prof) {
               await completeLoginFlow(session.user.id);
